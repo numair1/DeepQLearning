@@ -47,6 +47,7 @@ with tf.Session() as sess:
     net_glitazone_aug=0
     freq_insulin_aug=0
     freq_insulin_aug_disc=0
+    #rewards_dict={"0.0":0,"1.0":0,"-2.0":0,"-10.0":0}
     for strt_pt in gold_standard_dict:
         rList=[]
         starting_NAT=int(strt_pt.split(",")[0])
@@ -55,54 +56,47 @@ with tf.Session() as sess:
         for i in range(500):
             sim=Simulation()
             first_state, death_indicator=sim.get_custom_first_state(starting_NAT,starting_D,starting_A1c_cat)
-            #Dynamic variable to keep track of current state
+			#Dynamic variable to keep track of current state
             current_state=first_state
             rList.append(0)
             for t in range(20):
-                #print current_state
                 #Abandon trajactory if patient dies
                 if death_indicator==1:
                     break
                 #Take deterministic action if next action is deterministic
                 elif sim.is_next_action_deterministic(current_state):
                     action=sim.get_next_deterministic_action(current_state)
-                    if current_state[0]==2 and action==1:
+                    if current_state[0]==0 and action==1:
 						det_glitazone_aug+=1
 		    #print "Deterministic Action:" +str(action)
                     next_state,death_indicator=sim.get_next_state(current_state,action)
                     reward=sim.get_reward(next_state,death_indicator)
-		    if current_state[0]==3 and action==1:
-		    	freq_insulin_aug+=1
-			if next_state[1]==1:
-				freq_insulin_aug_disc+=1
-                    #print "Reward: "+str(reward)
+		    #rewards_dict[str(reward)]+=1
                     rList[i]+=(gamma**t)*reward
                     #Update state tracking variable reflect current state
                     current_state=next_state
                 else:
                     #Choose an action by greedily (with e chance of random action) from the Q-network
                     a= sess.run([op_to_restore],feed_dict={inp:np.reshape(current_state,(1,5))})#Replace Q-out here with most recent Qout
-		    if current_state[0]==2:
+		    if current_state[0]==1:
 		    	net_glitazone_opp+=1
-		    if current_state[0]==2 and a[0][0]==1:
-			net_glitazone_aug+=1
+		    if current_state[0]==1 and a[0][0]==1:
+				net_glitazone_aug+=1
 		    #print "Network Chosen Action: "+str(a[0])
                     #print "Action: "+str(a[0][0])
                     next_state,death_indicator=sim.get_next_state(current_state,a[0][0])
                     reward=float(sim.get_reward(next_state,death_indicator))
-		    if current_state[0]==3 and a[0][0]==1:
-		    	freq_insulin_aug+=1
-			if next_state[1]==1:
-				freq_insulin_aug_disc+=1
-					#print "Reward: "+str(reward)
+		    #rewards_dict[str(reward)]+=1
+		    #print "Reward: "+str(reward)
                     rList[i]+=(gamma**t)*reward
                     #Once all is done, set next state equal to new state
                     current_state=next_state
         print "Starting Point:"+strt_pt+" "+str(np.mean(rList))
         gold_standard_dict[strt_pt][2]=np.mean(rList)
+#print rewards_dict
 print "Deterministic Glitazone Augment: "+str(det_glitazone_aug)
 print "Network Glitazone Augment: "+str(net_glitazone_aug)
 results_json=json.dumps(gold_standard_dict)
 with open("results_json_corrected.txt", 'w+') as outfile:
-    outfile.write(results_json)
+	outfile.write(results_json)
 print float(net_glitazone_aug)/float(net_glitazone_opp)

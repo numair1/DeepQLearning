@@ -100,6 +100,8 @@ class Simulation():
 			return -10.0
 		elif new_state[2]<7:
 			return 1.0
+		# elif new_state[2]<7 and action==1:
+		# 	return 5.0
 		elif new_state[2]>7 and new_state[1]==1:
 			return -2.0
 		else:

@@ -25,8 +25,6 @@ def measure_NAT_breakdown(training_batch):
 
 def eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,Q_dict):
 	epoch_reward=0
-	network_augments=0
-	network_opp=0
 	for strt_pt in gold_standard_dict:
 		starting_NAT=int(strt_pt.split(",")[0])
 		starting_D=int(strt_pt.split(",")[1])
@@ -40,7 +38,7 @@ def eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,Q_dict):
 			#Dynamic variable to keep track of current state
 			eval_current_state=eval_first_state
 			eval_rList.append(0)
-			for time in range(10):
+			for time in range(20):
 				#Abandon trajactory if patient dies
 				if eval_death_indicator==1:
 					break
@@ -54,10 +52,7 @@ def eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,Q_dict):
 					eval_current_state=eval_next_state
 				else:
 					#Choose an action by greedily (with e chance of random action) from the Q-network
-					network_opp+=1
 					eval_a= sess.run([Qnet.predict],feed_dict={Qnet.input_states:np.reshape(eval_current_state,(1,5))})
-					if eval_a[0][0]==1:
-						network_augments+=1
 					eval_next_state,eval_death_indicator=eval_sim.get_next_state(eval_current_state,eval_a[0][0])
 					eval_reward=float(eval_sim.get_reward(eval_next_state,eval_death_indicator))
 					eval_rList[index]+=(gamma**time)*eval_reward
@@ -66,13 +61,11 @@ def eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,Q_dict):
 		point_reward=np.mean(eval_rList)
 		Q_dict[strt_pt].append(float(point_reward))
 		epoch_reward+=point_reward
-	print "Epoch Reward:"+str(epoch_reward)
-	#print str(float(network_augments)/float(network_opp))
 	if epoch_reward>max_reward:
 		max_reward=epoch_reward
 		save_path=saver.save(sess,'models/best_model')
-		#print step
-		#print epoch_reward
+		print step
+		print epoch_reward
 	return max_reward
 
 #Create dictionary containing gold standard < starting point: ValGGQ, ValBell, NN_output>
@@ -136,10 +129,10 @@ state_Q_dict={"0,0,2":[],
 #Initialize network parameters
 batch_size=64
 gamma=0.6
-num_episodes=501
+num_episodes=100
 environment_steps=20
 e=0.1
-min_buffer_size=100
+min_buffer_size=250
 
 #Initialize tensoflow graph
 tf.reset_default_graph()
@@ -163,22 +156,26 @@ loss_list=[]
 
 #
 # Record training examples distribution
+NAT_dict={"0":0,"1":0,"-2":0,"-10":0}
 with tf.Session() as sess:
 	sess.run(init)
 	writer = tf.summary.FileWriter("./logs/",sess.graph)
-	#saver.restore(sess,'./models/best_model')
+	saver.restore(sess,'./models/best_model')
+	#Evaluate network every 50 steps
 	max_reward=-100
 	for it in range(num_episodes):
 		#Initialize simulation
 		sim=Simulation()
 		first_state,death_indicator=sim.get_first_state()
+
 		#Dynamic variable to keep track of current state
 		current_state=first_state
 		current_death_indicator=death_indicator
 		#Model Checkpoint
 		if it%100==0 and it!=0:
-			save_path=saver.save(sess,'models/my-model',global_step=it)
+			#save_path=saver.save(sess,'models/my-model',global_step=it)
 			continue
+
 		# SDG and optimization
 		for t in range(environment_steps):
 			#Abandon trajactory if patient dies
@@ -202,11 +199,13 @@ with tf.Session() as sess:
 				#Add tuple <state,action,reward,new state> to experience buffer
 				experience_buffer.add(experience_tuple)
 			#Once all is done, set next state equal to new state
-	            	current_state=next_state
-            		current_death_indicator=next_death_indicator
+                	current_state=next_state
+                	current_death_indicator=next_death_indicator
+
 		if experience_buffer.get_size()>min_buffer_size:
 			experience_batch=experience_buffer.sample(batch_size)
 			#Code to calculate targetQ and then perform gradient descent and update model
+
 			#Initial state
 			state_array=np.reshape(np.vstack(experience_batch[:,0]),(-1,5))
 			#States after taking action
@@ -233,7 +232,8 @@ with tf.Session() as sess:
 					else:
 						action=np.argmax(next_Q_arr[0])
 					#Get the value of y= r+gamma*Q
-					y[i]=[np.add(np.multiply(next_Q_arr[0,action],gamma),rewards_array[i]),actions_array[i]]
+					y[i]=[np.add(np.multiply(next_Q_arr[0,action],gamma),rewards_array[i]),action]
+
 			#Q-values according to the network as it is now
 			updated_Q_arr=sess.run(Qnet.Qout3,feed_dict={Qnet.input_states: state_array})
 			for j in range(batch_size):
@@ -243,17 +243,15 @@ with tf.Session() as sess:
 			loss_list.append(float(loss))
 			writer.add_summary(summary,step)
 			step+=1
+
 			#Evaluate network every 50 steps
-			if step%50==0 and step!=0:
+			if step%10==0 and step!=0:
 				max_reward=eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,state_Q_dict)
-# with open("./reward_breakdown.txt","wb+") as reward_file:
-# 	rewards_json=json.dumps(NAT_dict)
-# 	reward_file.write(rewards_json)
-# with open("./loss_tracker.txt","wb+") as loss_file:
-# 	loss_json=json.dumps(loss_list)
-# 	loss_file.write(loss_json)
-#
-# with open("./Q_tracker.txt","wb+") as Q_file:
-# 	Q_json=json.dumps(state_Q_dict)
-# 	Q_file.write(Q_json)
-# print A1c_dict
+print loss_list
+with open("./loss_tracker.txt","wb+") as loss_file:
+	loss_json=json.dumps(loss_list)
+	loss_file.write(loss_json)
+
+with open("./Q_tracker.txt","wb+") as Q_file:
+	Q_json=json.dumps(state_Q_dict)
+	Q_file.write(Q_json)
