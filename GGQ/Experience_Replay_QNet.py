@@ -48,7 +48,7 @@ def eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,Q_dict):
 				elif eval_sim.is_next_action_deterministic(eval_current_state):
 					eval_action=eval_sim.get_next_deterministic_action(eval_current_state)
 					eval_next_state,eval_death_indicator=eval_sim.get_next_state(eval_current_state,eval_action)
-					eval_reward=float(eval_sim.get_reward(eval_next_state,eval_death_indicator))
+					eval_reward=float(eval_sim.get_reward(eval_next_state,eval_death_indicator,0))
 					eval_rList[index]+=(gamma**time)*eval_reward
 					#Update state tracking variable reflect current state
 					eval_current_state=eval_next_state
@@ -59,7 +59,7 @@ def eval_net(sess,gold_standard_dict,Qnet,saver,max_reward,step,Q_dict):
 					if eval_a[0][0]==1:
 						network_augments+=1
 					eval_next_state,eval_death_indicator=eval_sim.get_next_state(eval_current_state,eval_a[0][0])
-					eval_reward=float(eval_sim.get_reward(eval_next_state,eval_death_indicator))
+					eval_reward=float(eval_sim.get_reward(eval_next_state,eval_death_indicator,0))
 					eval_rList[index]+=(gamma**time)*eval_reward
 					#Once all is done, set next state equal to new state
 					eval_current_state=eval_next_state
@@ -136,10 +136,10 @@ state_Q_dict={"0,0,2":[],
 #Initialize network parameters
 batch_size=64
 gamma=0.6
-num_episodes=501
+num_episodes=10001
 environment_steps=20
 e=0.1
-min_buffer_size=100
+min_buffer_size=20000
 
 #Initialize tensoflow graph
 tf.reset_default_graph()
@@ -188,7 +188,7 @@ with tf.Session() as sess:
 			elif sim.is_next_action_deterministic(current_state):
 				a=sim.get_next_deterministic_action(current_state)
 				next_state,next_death_indicator=sim.get_next_state(current_state,a)
-				reward=sim.get_reward(next_state,next_death_indicator)
+				reward=sim.get_reward(next_state,next_death_indicator,a)
 				experience_tuple=[current_state,current_death_indicator,a,reward,next_state,next_death_indicator]
 				experience_buffer.add(experience_tuple)
 			else:
@@ -197,7 +197,7 @@ with tf.Session() as sess:
 				if random.random() < e:
 					a[0] = np.random.randint(2,size=1)[0]
 				next_state,next_death_indicator=sim.get_next_state(current_state,a[0])
-				reward=sim.get_reward(next_state,next_death_indicator)
+				reward=sim.get_reward(next_state,next_death_indicator,a[0])
 				experience_tuple=[current_state,current_death_indicator,a[0],reward,next_state,next_death_indicator]
 				#Add tuple <state,action,reward,new state> to experience buffer
 				experience_buffer.add(experience_tuple)
@@ -224,7 +224,7 @@ with tf.Session() as sess:
 			for i in range(batch_size):
 				y.append([0,0])
 				if succeeding_state_terminality[i]==1:
-					y[i]=[rewards_array[i],actions_array[i]]
+					y[i]=rewards_array[i]
 				else:
 					#Q-values for succeeding states according to the network as it is now
 					next_Q_arr=sess.run(Qnet.Qout3,feed_dict={Qnet.input_states: np.reshape(succeeding_state_array[i],(-1,5))})
@@ -233,13 +233,11 @@ with tf.Session() as sess:
 					else:
 						action=np.argmax(next_Q_arr[0])
 					#Get the value of y= r+gamma*Q
-					y[i]=[np.add(np.multiply(next_Q_arr[0,action],gamma),rewards_array[i]),actions_array[i]]
+					y[i]=np.add(np.multiply(next_Q_arr[0,action],gamma),rewards_array[i])
 			#Q-values according to the network as it is now
-			updated_Q_arr=sess.run(Qnet.Qout3,feed_dict={Qnet.input_states: state_array})
-			for j in range(batch_size):
-				#Update Q array with r+gamma*Q  and run least squares minmization against first_state_array
-				updated_Q_arr[j,y[j][1]]=y[j][0]
-			_,summary,loss,square=sess.run([Qnet.updateModel,Qnet.summary_op,Qnet.loss,Qnet.square],feed_dict={Qnet.input_states:state_array,Qnet.nextQ:updated_Q_arr})
+			#online_q_values=sess.run(Qnet.Qout3,feed_dict={Qnet.input_states: state_array})
+			_,summary,loss,online_q_values=sess.run([Qnet.updateModel,Qnet.summary_op,Qnet.loss,Qnet.online_q_values],feed_dict={Qnet.input_states:state_array,Qnet.actions_array:actions_array,Qnet.y:y})
+			print loss
 			loss_list.append(float(loss))
 			writer.add_summary(summary,step)
 			step+=1

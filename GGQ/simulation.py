@@ -95,13 +95,13 @@ class Simulation():
 			A1c_t=(prev_state[2]-self.prev_u_t+eps)/math.sqrt(1+self.sd_eps**2)+self.prev_u_t
 			return A1c_t
 
-	def get_reward(self,new_state,C_t):
+	def get_reward(self,new_state,C_t,action):
 		if C_t==1:
 			return -10.0
-		elif new_state[2]<7:
+		elif new_state[2]<7 and action==0:
 			return 1.0
-		# elif new_state[2]<7 and action==1:
-		# 	return 5.0
+		elif new_state[2]<7 and action==1:
+			return 5.0
 		elif new_state[2]>7 and new_state[1]==1:
 			return -2.0
 		else:

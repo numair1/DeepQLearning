@@ -70,7 +70,7 @@ with tf.Session() as sess:
 						det_glitazone_aug+=1
 		    #print "Deterministic Action:" +str(action)
                     next_state,death_indicator=sim.get_next_state(current_state,action)
-                    reward=sim.get_reward(next_state,death_indicator)
+                    reward=sim.get_reward(next_state,death_indicator,0)
 		    #rewards_dict[str(reward)]+=1
                     rList[i]+=(gamma**t)*reward
                     #Update state tracking variable reflect current state
@@ -78,14 +78,14 @@ with tf.Session() as sess:
                 else:
                     #Choose an action by greedily (with e chance of random action) from the Q-network
                     a= sess.run([op_to_restore],feed_dict={inp:np.reshape(current_state,(1,5))})#Replace Q-out here with most recent Qout
-		    if current_state[0]==1:
+		    if current_state[0]==2:
 		    	net_glitazone_opp+=1
-		    if current_state[0]==1 and a[0][0]==1:
+		    if current_state[0]==2 and a[0][0]==1:
 				net_glitazone_aug+=1
 		    #print "Network Chosen Action: "+str(a[0])
                     #print "Action: "+str(a[0][0])
                     next_state,death_indicator=sim.get_next_state(current_state,a[0][0])
-                    reward=float(sim.get_reward(next_state,death_indicator))
+                    reward=float(sim.get_reward(next_state,death_indicator,0))
 		    #rewards_dict[str(reward)]+=1
 		    #print "Reward: "+str(reward)
                     rList[i]+=(gamma**t)*reward
